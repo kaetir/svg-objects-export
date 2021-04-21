@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 svg-objects-export
 
@@ -25,28 +25,35 @@ This script requires Inkscape (tested with 0.48)
  * distorted or destroyed in any manner whatsoever without further attribution or
  * notice to the creator. Constructive feedback is always welcome nevertheless.
 """
-import argparse, sys, os, subprocess, cmd
-import re, lxml
+import argparse
+import sys
+import os
+import subprocess
+import cmd
+import re
+import lxml
 
 
-#constants (feel free to change these to your favorite defaults)
+# constants (feel free to change these to your favorite defaults)
 default_pattern = '^(rect|layer|path|use|g\d|svg|text|tspan|outline|image|circle|ellipse)\d'
-if (sys.platform == 'win32'): inkscape_prog = 'C:\Progra~1\Inkscape\inkscape.com'
-else: inkscape_prog = 'inkscape'
-xpath_namespaces = {'svg':"http://www.w3.org/2000/svg",	\
-	'sodipodi':"http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd", \
-	'inkscape':"http://www.inkscape.org/namespaces/inkscape", \
-	'xlink':"http://www.w3.org/1999/xlink", \
-	're':"http://exslt.org/regular-expressions"}
+if (sys.platform == 'win32'):
+    inkscape_prog = 'C:\Progra~1\Inkscape\inkscape.com'
+else:
+    inkscape_prog = 'inkscape'
+xpath_namespaces = {'svg': "http://www.w3.org/2000/svg",
+                    'sodipodi': "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd",
+                    'inkscape': "http://www.inkscape.org/namespaces/inkscape",
+                    'xlink': "http://www.w3.org/1999/xlink",
+                    're': "http://exslt.org/regular-expressions"}
 
-#usually not code change below this line is necessary. any improvement suggestions is welcome.
-#parse options
+# usually not code change below this line is necessary. any improvement suggestions is welcome.
+# parse options
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-	description='''Exports multiple objects from an SVG file to various formats
-(PNG, SVG, PS, EPS, PDF).''', 	
-	usage="%(prog)s [-h] [-p PATTERN] [options] infiles+",
-	epilog='''requirements
-	This program requires Inkscape 0.48+ and Python 2.7+
+                                 description='''Exports multiple objects from an SVG file to various formats
+(PNG, SVG, PS, EPS, PDF).''',
+                                 usage="%(prog)s [-h] [-p PATTERN] [options] infiles+",
+                                 epilog='''requirements
+	This program requires Inkscape 0.48+ and Python 3.6+
 
 default behaviour:
 	The program exports by default all objects with an ID that has not
@@ -90,61 +97,60 @@ Additional examples: https://github.com/berteh/svg-objects-export/wiki
 
 
 ''')
-parser.add_argument('infiles', nargs='+', 
-	help='SVG file(s) to export objects from, wildcards are supported')
-parser.add_argument('-p', '--pattern', default=default_pattern, 
-	help='pattern (regular expression) to identify which objects to export or exclude from export (depending on --exclude). Default pattern matches most ID generated automatically by Inkscape (in exclude mode).')	
+parser.add_argument('infiles', nargs='+',
+                    help='SVG file(s) to export objects from, wildcards are supported')
+parser.add_argument('-p', '--pattern', default=default_pattern,
+                    help='pattern (regular expression) to identify which objects to export or exclude from export (depending on --exclude). Default pattern matches most ID generated automatically by Inkscape (in exclude mode).')
 parser.add_argument('-x', '--xpath', default='', metavar='XPath EXPRESSION',
-	help='XPath expression to identify which objects to export or exclude from export (depending on --exclude). This option is not considered if a pattern is provided (see --patern).')	
-parser.add_argument('-e','--exclude', action='store_true', default=0,
-	help='use pattern or expression to determine which objects to exclude from export, rather than include')
-parser.add_argument ('-d', '--destdir', default='.',
-	help='directory where images are exported to. Trailing slash is needed (backslash for windows), default is working directory.')
-parser.add_argument('-s','--silent', action='store_true', default=False,
-	help='do not print information to command line. Silent mode does not overwrite existing files by default, combine with --force if needed.')
-parser.add_argument('-f','--force', action='store_true', default=False,
-	help='overwrite existing files. Default is to warn and prompt user unless --silent is active.')
-parser.add_argument('-P','--prefix', default='FILE_',
-	help='prefix the generated file names with given PREFIX. "FILE" in the prefix is replaced with the svg file name. Default is "FILE_".')
-parser.add_argument('-i', '--inkscape', default=inkscape_prog,#  metavar='path_to_inkscape',
-	help='path to inkscape command line executable')
+                    help='XPath expression to identify which objects to export or exclude from export (depending on --exclude). This option is not considered if a pattern is provided (see --patern).')
+parser.add_argument('-e', '--exclude', action='store_true', default=0,
+                    help='use pattern or expression to determine which objects to exclude from export, rather than include')
+parser.add_argument('-d', '--destdir', default='.',
+                    help='directory where images are exported to. Trailing slash is needed (backslash for windows), default is working directory.')
+parser.add_argument('-s', '--silent', action='store_true', default=False,
+                    help='do not print information to command line. Silent mode does not overwrite existing files by default, combine with --force if needed.')
+parser.add_argument('-f', '--force', action='store_true', default=False,
+                    help='overwrite existing files. Default is to warn and prompt user unless --silent is active.')
+parser.add_argument('-P', '--prefix', default='FILE_',
+                    help='prefix the generated file names with given PREFIX. "FILE" in the prefix is replaced with the svg file name. Default is "FILE_".')
+parser.add_argument('-i', '--inkscape', default=inkscape_prog,  # metavar='path_to_inkscape',
+                    help='path to inkscape command line executable')
 parser.add_argument('-t', '--type', default='png', choices=['png', 'ps', 'eps', 'pdf', 'plain-svg'],
-	help='export type (and suffix). png by default. See Inkscape --help for supported formats.')
+                    help='export type (and suffix). png by default. See Inkscape --help for supported formats.')
 parser.add_argument('-X', '--extra', metavar='Inkscape_Export_Options', default=' ',
-	help='Extra options passed through (litterally) to inkscape for export. See Inkscape --help for more.')
-parser.add_argument('-D','--debug', action='store_true', default=False,
-	help='Generates (very) verbose output.')
-
+                    help='Extra options passed through (litterally) to inkscape for export. See Inkscape --help for more.')
+parser.add_argument('-D', '--debug', action='store_true', default=False,
+                    help='Generates (very) verbose output.')
 
 
 def message(*msg):
-	""" Utility "print" function that handles verbosity of messages
-	"""
-	if (not args.silent  or args.debug):
-		print(''.join(msg))
-	return
+    """ Utility "print" function that handles verbosity of messages"""
+    if (not args.silent or args.debug):
+        print(''.join(msg))
+
+
 def debug(*msg):
-	""" Utility "print" function that handles verbosity of messages
-	"""
-	if (args.debug):
-		print(msg)
-	return
+    """ Utility "print" function that handles verbosity of messages"""
+    if (args.debug):
+        print(msg)
+
+
+
 def ife(test, if_result, else_result):
-	if(test):
-		return if_result
-	return else_result
+    if(test):
+        return if_result
+    return else_result
 
-def printif(*args):
-	print(ife(args))
 
-def confirm(prompt=None, resp=False): # adapted from http://code.activestate.com/recipes/541096-prompt-the-user-for-confirmation/
+# adapted from http://code.activestate.com/recipes/541096-prompt-the-user-for-confirmation/
+def confirm(prompt=None, resp=False):
     """prompts for yes or no response from the user. Returns True for yes and
     False for no.
 
     'resp' should be set to the default value assumed by the caller when
     user simply types ENTER.
     """
-    
+
     if prompt is None:
         prompt = 'Confirm'
 
@@ -152,7 +158,7 @@ def confirm(prompt=None, resp=False): # adapted from http://code.activestate.com
         prompt = '%s %s/%s: ' % (prompt, 'Y', 'n')
     else:
         prompt = '%s %s/%s: ' % (prompt, 'N', 'y')
-        
+
     while True:
         ans = input(prompt)
         if not ans:
@@ -165,100 +171,112 @@ def confirm(prompt=None, resp=False): # adapted from http://code.activestate.com
         if ans == 'n' or ans == 'N':
             return False
 
-def exportObject(obj,args,prefix,extension,infile):
-	debug("exporting ", obj)
-	destfile = ''.join([args.destdir, prefix, obj, '.', extension])
-	export = args.force
-	if not args.force:
-		if (not os.path.exists(destfile)):
-			export = True
-		elif not args.silent: # silent does not overwrite, use -sf if needed.
-			export = confirm(prompt='File %s already exists, do you want to overwrite it?' % (destfile))
-	if export:
-		# Check which Inkscape version we are using. v0.48 - v0.9x has options deprecated in v1.x
-		inkscape_version_output = str(subprocess.check_output([args.inkscape, '--version']))
-		inkscape_v1_or_greater = re.search('Inkscape [1-9]\.\d', inkscape_version_output)
-		debug("Inkscape Version Output: "+inkscape_version_output)
-		message('  '+obj+' to '+destfile)
-		command = args.inkscape+' -i "'+obj+'" --export-'+args.type+' "'+destfile+'" '+args.extra+' "'+infile+'" '
-		# If we're running v1, our command needs to be updated to the latest and greatest syntax.
-		if inkscape_v1_or_greater:
-			if args.type == 'plain-svg':
-				args.type = 'svg'
-			command = args.inkscape+' -i "'+obj+'" --export-type='+args.type+' "'+destfile+'" '+args.extra+' "'+infile+'" '
-		debug("runnning "+command)
-		run(command, shell=True)
 
-## handle arguments
+def exportObject(obj, args, prefix, extension, infile):
+    debug("exporting ", obj)
+    destfile = ''.join([args.destdir, prefix, obj, '.', extension])
+    export = args.force
+    if not args.force:
+        if (not os.path.exists(destfile)):
+            export = True
+        elif not args.silent:  # silent does not overwrite, use -sf if needed.
+            export = confirm(
+                prompt='File %s already exists, do you want to overwrite it?' % (destfile))
+            
+    if export:
+        # Check which Inkscape version we are using. v0.48 - v0.9x has options deprecated in v1.x
+        inkscape_version_output = str(subprocess.check_output([args.inkscape, '--version']))
+        inkscape_v1_or_greater = re.search('Inkscape [1-9]\.\d', inkscape_version_output)
+        debug("Inkscape Version Output: "+inkscape_version_output)
+        message('  '+obj+' to '+destfile)
+        command = args.inkscape+' -i "'+obj+'" --export-' + \
+            args.type+' "'+destfile+'" '+args.extra+' "'+infile+'" '
+        # If we're running v1, our command needs to be updated to the latest and greatest syntax.
+        if inkscape_v1_or_greater:
+            if args.type == 'plain-svg':
+                args.type = 'svg'
+            command = args.inkscape+' -i "'+obj+'" --export-type=' + \
+                args.type+' "'+destfile+'" '+args.extra+' "'+infile+'" '
+        debug("runnning "+command)
+        run(command, shell=True)
+
+
+# handle arguments
 args = parser.parse_args()
 if (args.silent):
-	run = subprocess.check_output #
+    run = subprocess.check_output
 else:
-	run = subprocess.check_call
+    run = subprocess.check_call
 # verify inkscape path
 try:
-	run([args.inkscape, "-V"])	
+    run([args.inkscape, "-V"])
 except Exception:
-	print('''Could not find inkscape command line executable, set --inkscape option accordingly.
-It is usually /usr/bin/inkscape in linux, C:\Progra~1\Inkscape\inkscape.com in windows, and /Applications/Inkscape.app/Contents/Resources/bin/inkscape in Mac.''')
-	sys.exit(2);
+    print('''Could not find inkscape command line executable, set --inkscape option accordingly.
+It is usually /usr/bin/inkscape in linux, C:\Programs\Inkscape\inkscape.com in windows, and /Applications/Inkscape.app/Contents/Resources/bin/inkscape in Mac.''')
+    sys.exit(2)
 # set 'include' mode by default for custom pattern or xpath
 if (args.exclude == 0):
-	args.exclude = (args.pattern is default_pattern) and (args.xpath is '')
+    args.exclude = (args.pattern is default_pattern) and (args.xpath is '')
 # fix 'plain-svg' extension
-if (args.type == 'plain-svg'): extension = 'plain-svg.svg'
-else: extension = args.type
+if (args.type == 'plain-svg'):
+    extension = 'plain-svg.svg'
+else:
+    extension = args.type
 # create destdir if needed
 if not os.path.exists(args.destdir):
-	message('creating directory: '+args.destdir)
-	os.makedirs(args.destdir)
+    message('creating directory: '+args.destdir)
+    os.makedirs(args.destdir)
 elif args.destdir is '.':
-	args.destdir = '' #remove dot for current directory to ease the definition of destfile
-#check for xpath
+    args.destdir = ''  # remove dot for current directory to ease the definition of destfile
+# check for xpath
 xpath_mode = (args.pattern is default_pattern) and not (args.xpath is '')
 regexp_mode = not xpath_mode
-#done with arguments processing
+# done with arguments processing
 debug("arguments: ", args)
 
 
-
-## process files
+# process files
 prefix = args.prefix
 
 for infile in args.infiles:
-	if ('FILE' in args.prefix): #update prefix if needed		
-		prefix = args.prefix.replace('FILE',os.path.splitext(os.path.split(infile)[1])[0])
-		#debug("  updated prefix to ", prefix, "  - infile is ", infile)	
-	if (regexp_mode):
-		#import re
-		message("exporting from "+infile+" all objects "+ife(args.exclude,'not ','')+"matching "+args.pattern)
-		objects_all = subprocess.check_output([args.inkscape, "--query-all", infile])	
-		#message(objects)
-		for obj in objects_all.splitlines():
-			obj = obj.split(b',')[0].decode('utf-8') #keep only ID:
-			match = re.search(args.pattern, obj)
-			#debug("object ",obj,ife(match, " matches"," does not match"))
-			if ((args.exclude and (match == None)) or (not args.exclude and (match != None)) ):
-				exportObject(obj,args,prefix,extension,infile)				
-	elif (xpath_mode):
-		from lxml import etree
-		message("exporting from "+infile+" all objects "+ife(args.exclude,'not ','')+"matching "+args.xpath)
-		parser = etree.XMLParser() #ns_clean=True)
-		intree = etree.parse(infile, parser)
-		if (len(parser.error_log) > 0):
-			message ("Could not parse ",infile,":")
-			debug(error_log)		
-		find = etree.XPath("("+args.xpath+")/@id", namespaces=xpath_namespaces) #find the ids, not the objects
-		objects = find(intree)
-		message("found %i objects matching XPath" % len(objects))
-		if (not args.exclude): #include mode
-			for obj in objects:
-				exportObject(obj,args,prefix,extension,infile)
-		else: #exclude mode
-			objects_all = subprocess.check_output([args.inkscape, "--query-all", infile])	
-			#message(objects)
-			for obj in objects_all.splitlines():
-				obj = obj.split(',')[0] #keep only ID:
-				if not(obj in objects):
-					exportObject(obj,args,prefix,extension,infile)
-		
+    if ('FILE' in args.prefix):  # update prefix if needed
+        prefix = args.prefix.replace(
+            'FILE', os.path.splitext(os.path.split(infile)[1])[0])
+        #debug("  updated prefix to ", prefix, "  - infile is ", infile)
+    if (regexp_mode):
+        #import re
+        message("exporting from "+infile+" all objects " + ife(args.exclude, 'not ', '')+"matching "+args.pattern)
+        objects_all = subprocess.check_output([args.inkscape, "--query-all", infile])
+        # message(objects)
+        for obj in objects_all.splitlines():
+            obj = obj.split(b',')[0].decode('utf-8')  # keep only ID:
+            match = re.search(args.pattern, obj)
+            #debug("object ",obj,ife(match, " matches"," does not match"))
+            if ((args.exclude and (match == None)) or (not args.exclude and (match != None))):
+                exportObject(obj, args, prefix, extension, infile)
+    elif (xpath_mode):
+        from lxml import etree
+        message("exporting from "+infile+" all objects " + ife(args.exclude, 'not ', '')+"matching "+args.xpath)
+        parser = etree.XMLParser()  # ns_clean=True)
+        intree = etree.parse(infile, parser)
+        
+        if (len(parser.error_log) > 0):
+            message("Could not parse ", infile, ":")
+            debug(parser.error_log)
+        
+        # find the ids, not the objects
+        find = etree.XPath("("+args.xpath+")/@id", namespaces=xpath_namespaces)
+        objects = find(intree)
+        message("found %i objects matching XPath" % len(objects))
+        
+        if (not args.exclude):  # include mode
+            for obj in objects:
+                exportObject(obj, args, prefix, extension, infile)
+        
+        else:  # exclude mode
+            objects_all = subprocess.check_output([args.inkscape, "--query-all", infile])
+            # message(objects)
+            for obj in objects_all.splitlines():
+                obj = obj.split(',')[0]  # keep only ID:
+                if not(obj in objects):
+                    exportObject(obj, args, prefix, extension, infile)
